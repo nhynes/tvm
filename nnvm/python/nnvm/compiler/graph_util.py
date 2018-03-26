@@ -111,9 +111,26 @@ def get_gradient_graph(ys, xs, grad_ys=None):
     ret : Graph
         Generated gradient graph.
     """
+    if isinstance(xs, list):
+        xs = Group(xs)
     if isinstance(ys, list):
         ys = Group(ys)
     g = create(ys)
+
+    # expand the graph then translate replace each requested grad symbols with
+    # its counterpart in the expanded graph
+    g = g.apply('InferShape').apply('ExpandCompute')
+    def _get_outs(s):
+         return [s[i] for i in range(len(s.list_output_names()))]
+    g_name2sym = {s.attr('name'): s for s in _get_outs(g.symbol.get_internals())}
+    def _tx_symb(symb):
+        tx = [g_name2sym[s.attr('name')] for s in _get_outs(symb)]
+        if len(tx) > 1:
+            return Group(tx)
+        return tx[0]
+    ys = _tx_symb(ys)
+    xs = _tx_symb(xs)
+
     g._set_symbol_list_attr('grad_ys', ys)
     g._set_symbol_list_attr('grad_xs', xs)
     ny = len(ys.list_output_names())
