@@ -115,6 +115,7 @@ Graph GraphTransform(Graph graph, FTransform ftransform) {
       ret.outputs.push_back(graph.outputs[i]);
     }
   }
+  ret.num_vis_outputs = graph.num_vis_outputs;
   return ret;
 }
 

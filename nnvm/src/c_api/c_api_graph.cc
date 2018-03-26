@@ -16,7 +16,14 @@ using namespace nnvm;
 int NNGraphCreate(SymbolHandle symbol, GraphHandle *graph) {
   Graph* g = new Graph();
   API_BEGIN();
-  g->outputs = static_cast<Symbol*>(symbol)->outputs;
+  Symbol* s = static_cast<Symbol*>(symbol);  // may actually be a Graph
+  for (const auto& out : s->outputs)
+    g->outputs.push_back(out);
+  for (const auto& out : s->extra_outputs) {
+    g->outputs.push_back(out);
+    g->extra_outputs.push_back(out);
+  }
+  g->num_vis_outputs = s->outputs.size();
   *graph = g;
   API_END_HANDLE_ERROR(delete g);
 }

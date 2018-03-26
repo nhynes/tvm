@@ -292,12 +292,16 @@ void Symbol::Compose(const array_view<const Symbol*>& args,
     if (garg_idx.empty() || std::find(garg_idx.begin(), garg_idx.end(), i) == garg_idx.end())
       CHECK_EQ(args[i]->outputs.size(), 1U)
         << "Argument " << i << " is a tuple, single value is required";
+    for (const auto& extra_out : args[i]->extra_outputs)
+      extra_outputs.push_back(extra_out);
   }
   for (const auto& kv : kwargs) {
     if (garg_names.empty()
         || std::find(garg_names.begin(), garg_names.end(), kv.first) == garg_names.end())
       CHECK_EQ(kv.second->outputs.size(), 1U)
         << "Keyword Argument " << kv.first << " is a tuple, single value is required";
+    for (const auto& extra_out : kv.second->extra_outputs)
+      extra_outputs.push_back(extra_out);
   }
   // assign new name
   if (!name.empty()) outputs[0].node->attrs.name = name;
@@ -614,11 +618,16 @@ Symbol Symbol::CreateFunctor(const NodeAttrs& attrs) {
   n->attrs = attrs;
 
   uint32_t nout = n->num_outputs();
+  uint32_t nvis = nout;
   if (fnum_vis_output.count(n->op())) {
-    nout = fnum_vis_output[n->op()](n->attrs);
+    nvis = fnum_vis_output[n->op()](n->attrs);
   }
-  for (uint32_t i = 0; i < nout; ++i) {
+  for (uint32_t i = 0; i < nvis; ++i) {
     s.outputs.emplace_back(NodeEntry{n, i, 0});
+  }
+  s.extra_outputs = std::vector<NodeEntry>();
+  for (uint32_t i = nvis; i < nout; ++i) {
+    s.extra_outputs.emplace_back(NodeEntry{n, i, 0});
   }
   return s;
 }

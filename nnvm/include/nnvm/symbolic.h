@@ -52,6 +52,8 @@ class NNVM_DLL Symbol {
 
   /*! \brief output entries contained in the symbol */
   std::vector<NodeEntry> outputs;
+  /*! \brief additional output entries contained in the symbol */
+  std::vector<NodeEntry> extra_outputs;
 
   /*!
    * \brief Copy the symbol.

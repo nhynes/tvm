@@ -28,6 +28,10 @@ class Graph {
  public:
   /*! \brief outputs of the computation graph. */
   std::vector<NodeEntry> outputs;
+  /*! \brief extra outputs of the computation graph. */
+  std::vector<NodeEntry> extra_outputs;
+  /*! \brief number of visible outputs of the computation graph. */
+  uint32_t num_vis_outputs;
   /*!
    * \brief attributes of a graph
    *  Note that attribute is shared pointer and can be shared across graphs.
