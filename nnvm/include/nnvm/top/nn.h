@@ -43,6 +43,7 @@ struct DropoutParam : public dmlc::Parameter<DropoutParam> {
 };
 
 struct BatchNormParam : public dmlc::Parameter<BatchNormParam> {
+  bool training;
   int axis;
   double epsilon;
   double momentum;
@@ -50,6 +51,11 @@ struct BatchNormParam : public dmlc::Parameter<BatchNormParam> {
   bool scale;
 
   DMLC_DECLARE_PARAMETER(BatchNormParam) {
+    DMLC_DECLARE_FIELD(training).set_default(0)
+      .describe("If True, output will be centered and the moving statistics "
+                "will be updated.");
+    DMLC_DECLARE_FIELD(momentum).set_default(0.1)
+      .describe("Dampening parameter for moving_(mean|var) when training.");
     DMLC_DECLARE_FIELD(axis).set_default(1)
       .describe("Specify which shape axis the channel is specified.");
     DMLC_DECLARE_FIELD(epsilon).set_default(1e-5)

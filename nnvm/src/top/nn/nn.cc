@@ -17,7 +17,9 @@
 #include "../elemwise_op_common.h"
 #include "topi/nn/dense.h"
 #include "topi/nn.h"
+#include "topi/nn/batch_norm.h"
 #include "topi/nn/softmax.h"
+#include "../../compiler/pattern_util.h"
 
 namespace nnvm {
 namespace top {
@@ -263,6 +265,15 @@ inline bool BatchNormCorrectLayout(const NodeAttrs& attrs,
   return true;
 }
 
+inline NodeEntry MakeMomentumNode(std::string name, NodeEntry prev, NodeEntry cur, float interp) {
+  return MakeNode("broadcast_add", name + "_add", {
+      MakeNode("__mul_scalar__", name + "_mul_prev",
+               { prev }, {{"scalar", std::to_string(interp)}}),
+      MakeNode("__mul_scalar__", name + "_mul_prev",
+               { cur }, {{"scalar", std::to_string(1 - interp)}}),
+    });
+}
+
 NNVM_REGISTER_OP(batch_norm)
 .describe(R"(Batch normalization layer (Ioffe and Szegedy, 2014).
 Normalizes the input at each batch, i.e. applies a transformation
@@ -323,6 +334,56 @@ axis to be the last item in the input shape.
   })
 .set_attr<FMutateInputs>("FMutateInputs", [](const NodeAttrs& attrs) {
     return std::vector<uint32_t>{3, 4};
+  })
+.set_attr<FExpandCompute>(
+  "FExpandCompute", [](const NodePtr& n,
+                 const std::vector<NodeEntry>& inputs,
+                 const std::vector<TShape>& input_shapes) {
+    const BatchNormParam& param = nnvm::get<BatchNormParam>(n->attrs.parsed);
+    uint32_t in_dim = input_shapes[0].ndim();
+    int ax = param.axis;
+
+    NodeEntry mean, var, new_mean, new_var;
+    if (param.training) {
+      mean = MakeNode("mean", n->attrs.name + "_mean", { inputs[0] },
+                      {{"axis", std::to_string(ax)},
+                       {"exclude", "true"}});
+      var = MakeNode("var", n->attrs.name + "_var", { inputs[0] },
+                      {{"axis", std::to_string(ax)},
+                       {"exclude", "true"}});
+      new_mean = MakeMomentumNode(n->attrs.name + "_mean_mom",
+                                  inputs[3], mean, param.momentum);
+      new_var = MakeMomentumNode(n->attrs.name + "_var_mom",
+                                 inputs[4], var, param.momentum);
+      new_mean = MakeNode("_assign", n->attrs.name + "_mean_update",
+                          {inputs[3], new_mean});
+      new_var = MakeNode("_assign", n->attrs.name + "_var_update",
+                         {inputs[4], new_var});
+    } else {
+      mean = inputs[3];
+      var = inputs[4];
+      NodeEntry undef = MakeNode("__undef__", "undef", {});
+      new_mean = undef;
+      new_var = undef;
+    }
+    mean = compiler::ExpandBiasToMatchAxis(mean, in_dim, 1, ax);
+    var = compiler::ExpandBiasToMatchAxis(var, in_dim, 1, ax);
+
+    NodeEntry x_normed = MakeNode("broadcast_div", n->attrs.name + "_scale", {
+        MakeNode("broadcast_sub", n->attrs.name + "_center", { inputs[0], mean }),
+        MakeNode("sqrt", n->attrs.name + "_sqrt", {
+            MakeNode("__add_scalar__", n->attrs.name + "_add_eps",
+                     { var }, {{"scalar", std::to_string(param.epsilon)}})
+          })
+      });
+
+    NodeEntry scale = compiler::ExpandBiasToMatchAxis(inputs[1], in_dim, 1, ax);
+    NodeEntry shift = compiler::ExpandBiasToMatchAxis(inputs[2], in_dim, 1, ax);
+    NodeEntry x_affine = MakeNode("broadcast_add", n->attrs.name + "_bias", {
+        MakeNode("broadcast_mul", n->attrs.name + "_weight", { x_normed, scale }),
+        shift
+      });
+    return std::vector<NodeEntry>{ x_affine, new_mean, new_var };
   })
 .set_support_level(1);
 
