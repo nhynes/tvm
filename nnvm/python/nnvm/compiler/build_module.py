@@ -160,6 +160,11 @@ def optimize(graph, shape, dtype="float32", layout=None):
     # pylint: disable=unused-argument
     cfg = BuildConfig.current
 
+    if any(map(cfg.pass_enabled,
+               ["AlterOpLayout", "SimplifyInference", "FoldScaleAxis"])):
+        graph = graph_attr.set_shape_inputs(graph, shape)
+        graph = graph.apply(["InferShape", "ExpandCompute"])
+
     if cfg.pass_enabled("AlterOpLayout"):
         layout = layout if layout else {}
         graph = graph_attr.set_layout_inputs(graph, layout)
@@ -276,6 +281,8 @@ def build(graph, target=None, shape=None, dtype="float32",
         init_var = {}
         if _all_var_init:
             init_var = initialize_variables(shape, dtype)
+        # Expand FComputes
+        graph = graph.apply("InferShape").apply("ExpandCompute")
         # Apply optimization
         with target:
             graph = optimize(graph, shape, dtype, layout)
