@@ -389,26 +389,14 @@ NNVM_REGISTER_OP(global_avg_pool2d)
 .set_attr<FInferShape>("FInferShape", GlobalPool2DInferShape)
 .set_attr<FInferType>("FInferType", ElemwiseType<1, 1>)
 .set_attr<FCorrectLayout>("FCorrectLayout", GlobalPool2DCorrectLayout)
-.set_attr<FTVMCompute>(
-  "FTVMCompute", [](const NodeAttrs& attrs,
-                    const Array<Tensor>& inputs,
-                    const Array<Tensor>& out_info) {
-  const GlobalPool2DParam& param = nnvm::get<GlobalPool2DParam>(attrs.parsed);
-  Layout layout(param.layout);
-  CHECK(layout.convertible(Layout("NCHW")))
-    << "global_avg_pool2d currently only supports layouts that are convertible from NCHW";
-  CHECK_EQ(layout.indexof('h'), -1)
-    << "global_avg_pool2d does not support input split on height";
-  CHECK_EQ(layout.indexof('w'), -1)
-    << "global_avg_pool2d does not support input split on width";
-
-  CHECK(inputs[0].ndim() == 4U || inputs[0].ndim() == 5U)
-    << "Pool2D only support 4-D input (e.g., NCHW)"
-    << " or 5-D input (last dimension is a split of channel)";
-
-  return Array<Tensor>{
-    topi::nn::global_pool(inputs[0], topi::nn::kAvgPool, layout.name()) };
-})
+.set_attr<FExpandCompute>(
+  "FExpandCompute", [](const NodePtr& n,
+                       const std::vector<NodeEntry>& inputs,
+                       const std::vector<TShape>& input_shapes) {
+    return std::vector<NodeEntry>{
+      MakeNode("mean", n->attrs.name, {inputs[0]}, {{"axis", "[2,3]"}})
+    };
+  })
 .set_num_outputs(1)
 .set_num_inputs(1)
 .set_support_level(2);
