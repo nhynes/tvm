@@ -218,7 +218,7 @@ Example::
     auto diffs2 = MakeNode("__pow_scalar__", n->attrs.name + "_pow",
                            { diffs }, {{"scalar", "2"}});
     return std::vector<NodeEntry>{
-      MakeNode("mean", n->attrs.name + "_m2", { diffs2 }, n->attrs.dict)
+      MakeNode("mean", n->attrs.name, { diffs2 }, n->attrs.dict)
     };
 });
 
