@@ -268,9 +268,9 @@ inline bool BatchNormCorrectLayout(const NodeAttrs& attrs,
 inline NodeEntry MakeMomentumNode(std::string name, NodeEntry prev, NodeEntry cur, float interp) {
   return MakeNode("broadcast_add", name + "_add", {
       MakeNode("__mul_scalar__", name + "_mul_prev",
-               { prev }, {{"scalar", std::to_string(interp)}}),
+               { prev }, {{"scalar", std::to_string(1 - interp)}}),
       MakeNode("__mul_scalar__", name + "_mul_prev",
-               { cur }, {{"scalar", std::to_string(1 - interp)}}),
+               { cur }, {{"scalar", std::to_string(interp)}}),
     });
 }
 
@@ -377,9 +377,9 @@ axis to be the last item in the input shape.
           })
       });
 
-    NodeEntry scale = compiler::ExpandBiasToMatchAxis(inputs[1], in_dim, 1, ax);
-    NodeEntry shift = compiler::ExpandBiasToMatchAxis(inputs[2], in_dim, 1, ax);
-    NodeEntry x_affine = MakeNode("broadcast_add", n->attrs.name + "_bias", {
+    NodeEntry scale = inputs[1];
+    NodeEntry shift = inputs[2];
+    NodeEntry x_affine = MakeNode("broadcast_add", n->attrs.name, {
         MakeNode("broadcast_mul", n->attrs.name + "_weight", { x_normed, scale }),
         shift
       });

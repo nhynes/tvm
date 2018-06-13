@@ -211,7 +211,6 @@ Example::
                        const std::vector<NodeEntry>& inputs,
                        const std::vector<TShape>& input_shapes) {
     auto rp_keepdims = std::unordered_map<std::string, std::string>(n->attrs.dict);
-    rp_keepdims["keepdims"] = "true";
     auto inp = n->inputs[0];
     auto mean = MakeNode("mean", n->attrs.name + "_m1", {inp}, rp_keepdims);
     auto diffs = MakeNode("broadcast_sub", n->attrs.name + "_sub", {inp, mean});
