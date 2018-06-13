@@ -602,11 +602,16 @@ Symbol Symbol::CreateFunctor(const Op* op,
   }
 
   uint32_t nout = n->num_outputs();
+  uint32_t nvis = nout;
   if (fnum_vis_output.count(n->op())) {
-    nout = fnum_vis_output[n->op()](n->attrs);
+    nvis = fnum_vis_output[n->op()](n->attrs);
   }
-  for (uint32_t i = 0; i < nout; ++i) {
+  for (uint32_t i = 0; i < nvis; ++i) {
     s.outputs.emplace_back(NodeEntry{n, i, 0});
+  }
+  s.extra_outputs = std::vector<NodeEntry>();
+  for (uint32_t i = nvis; i < nout; ++i) {
+    s.extra_outputs.emplace_back(NodeEntry{n, i, 0});
   }
   return s;
 }
@@ -636,6 +641,8 @@ Symbol Symbol::CreateGroup(const std::vector<Symbol> &symbols) {
   Symbol ret;
   for (const auto &s : symbols) {
     ret.outputs.insert(ret.outputs.end(), s.outputs.begin(), s.outputs.end());
+    ret.extra_outputs.insert(ret.extra_outputs.end(), s.extra_outputs.begin(),
+                             s.extra_outputs.end());
   }
   return ret;
 }

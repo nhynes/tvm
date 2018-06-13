@@ -355,17 +355,17 @@ axis to be the last item in the input shape.
                                   inputs[3], mean, param.momentum);
       new_var = MakeMomentumNode(n->attrs.name + "_var_mom",
                                  inputs[4], var, param.momentum);
-      new_mean = MakeNode("_assign", n->attrs.name + "_mean_update",
-                          {inputs[3], new_mean});
-      new_var = MakeNode("_assign", n->attrs.name + "_var_update",
-                         {inputs[4], new_var});
     } else {
       mean = inputs[3];
       var = inputs[4];
-      NodeEntry undef = MakeNode("__undef__", "undef", {});
-      new_mean = undef;
-      new_var = undef;
+      new_mean = inputs[3];
+      new_var = inputs[4];
     }
+
+    new_mean = MakeNode("_assign", n->attrs.name + "_mean_update",
+                        {inputs[3], new_mean});
+    new_var = MakeNode("_assign", n->attrs.name + "_var_update",
+                       {inputs[4], new_var});
     mean = compiler::ExpandBiasToMatchAxis(mean, in_dim, 1, ax);
     var = compiler::ExpandBiasToMatchAxis(var, in_dim, 1, ax);
 
