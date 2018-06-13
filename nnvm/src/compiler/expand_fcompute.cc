@@ -23,9 +23,9 @@ Graph ExpandCompute(nnvm::Graph src) {
     const Node* src = idx[i].source;
     uint32_t num_outputs = src->num_outputs();
     std::string name = src->attrs.name;
-    CHECK(name2shape.count(name) == 0 || name2shape[name] == shape_vec[j])
-      << "Reassigning shape of " << name << ". prev: "
-      << shape_vec[j] << ", new: " << name2shape[name];
+    // CHECK(name2shape.count(name) == 0 || name2shape[name] == shape_vec[j])
+    //   << "Reassigning shape of " << name << ". prev: "
+    //   << shape_vec[j] << ", new: " << name2shape[name];
     name2shape[name] = shape_vec[j];
     j += num_outputs;
   }
