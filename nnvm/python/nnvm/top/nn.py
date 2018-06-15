@@ -149,8 +149,15 @@ def schedule_conv2d(attrs, outs, target):
 @reg.register_alter_op_layout("conv2d")
 def alter_conv2d_layout(attrs, inputs, tinfos):
     return topi.nn.conv2d_alter_layout(attrs, inputs, tinfos)
+@reg.register_schedule("_conv2d_grad_weight")
+def schedule_conv2d_grad_weight(attrs, outs, target):
+    """Schedule definition of conv2d_grad_weight"""
+    assert attrs["layout"] == "NCHW" and attrs.get_int("groups") == 1
+    with tvm.target.create(target):
+        return topi.generic.schedule_conv2d_grad_weight_nchw(outs)
 
 reg.register_pattern("conv2d", OpPattern.OUT_ELEMWISE_FUSABLE)
+reg.register_pattern("_conv2d_grad_weight", OpPattern.OUT_ELEMWISE_FUSABLE)
 
 # convolution NCHWc
 @reg.register_compute("_contrib_conv2d_NCHWc")

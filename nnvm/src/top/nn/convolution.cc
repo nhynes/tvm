@@ -3,10 +3,13 @@
  * \file convolution.cc
  * \brief Convolution operators
  */
+#include <tvm/tvm.h>
+#include <tvm/expr.h>
 #include <nnvm/op.h>
 #include <nnvm/node.h>
 #include <nnvm/layout.h>
 #include <nnvm/op_attr_types.h>
+#include <nnvm/compiler/op_attr_types.h>
 #include <nnvm/top/nn.h>
 #include <tvm/tensor.h>
 #include <tvm/packed_func_ext.h>
@@ -24,6 +27,10 @@ using nnvm::compiler::FTVMCompute;
 
 namespace nnvm {
 namespace top {
+
+using tvm::Tensor;
+using tvm::Array;
+using nnvm::compiler::FTVMCompute;
 
 // conv2d
 DMLC_REGISTER_PARAMETER(Conv2DParam);
@@ -436,7 +443,102 @@ NNVM_REGISTER_OP(_conv2d_grad)
     }
     return true;
 })
+.set_attr<FExpandCompute>(
+  "FExpandCompute", [](const NodePtr& n,
+                 const std::vector<NodeEntry>& inputs,
+                 const std::vector<TShape>& input_shapes) {
+    const Conv2DParam& param = nnvm::get<Conv2DParam>(n->attrs.parsed);
+
+    auto ograd = inputs[0];
+    auto input = inputs[1];
+    auto dshape = input_shapes[0];
+    auto weight = inputs[2];
+
+    std::unordered_map<std::string, std::string> dconv_attrs(n->attrs.dict);
+    dconv_attrs["use_bias"] = "false";
+    dconv_attrs["channels"] = std::to_string(input_shapes[2][1]);
+    float trunc_h = static_cast<float>(dshape[2] + 2*param.padding[0] - param.kernel_size[0]) / param.strides[0];
+    trunc_h = trunc_h - static_cast<uint64_t>(trunc_h);
+    float trunc_w = static_cast<float>(dshape[3] + 2*param.padding[1] - param.kernel_size[1]) / param.strides[1];
+    trunc_w = trunc_w - static_cast<uint64_t>(trunc_w);
+    TShape opad({static_cast<int64_t>(param.strides[0] * trunc_h),
+                 static_cast<int64_t>(param.strides[0] * trunc_w)});
+    std::ostringstream opad_oss;
+    opad_oss << opad;
+    dconv_attrs["output_padding"] = opad_oss.str();
+
+    std::vector<NodeEntry> grads{
+      MakeNode("conv2d_transpose", n->attrs.name + "_dx",
+               {ograd, weight}, dconv_attrs),
+      MakeNode("_conv2d_grad_weight", n->attrs.name + "_dw",
+               {inputs[0], inputs[1]}, n->attrs.dict)
+    };
+
+    if (param.use_bias) {
+      grads.push_back(
+          MakeNode("sum", n->attrs.name + "_db", {input}, {{"axis", "[2, 3]"}}));
+    }
+
+    return grads;
+})
 .set_attr<FInferType>("FInferType", ElemwiseType<3, -1>)
+.set_attr<TIsBackward>("TIsBackward", true);
+
+NNVM_REGISTER_OP(_conv2d_grad_weight)
+  .describe(R"code(2D convolution grad w.r.t. weight.
+
+)code" NNVM_ADD_FILELINE)
+.add_argument("ograd", "4D Tensor", "Output grad.")
+.add_argument("data", "4D Tensor", "Input data of conv2d.")
+.set_num_inputs(2)
+.set_num_outputs(1)
+.set_attr<FListOutputNames>("FListOutputNames", UseBiasListInputNames<Conv2DParam>)
+.set_attr_parser(ParamParser<Conv2DParam>)
+.set_attr<FGetAttrDict>("FGetAttrDict", ParamGetAttrDict<Conv2DParam>)
+.set_attr<FInferShape>(
+  "FInferShape", [](const nnvm::NodeAttrs& attrs,
+                    std::vector<TShape>* in_attrs,
+                    std::vector<TShape>* out_attrs) {
+    const Conv2DParam& param = nnvm::get<Conv2DParam>(attrs.parsed);
+    TShape dshape = in_attrs->at(1);
+    if (dshape.ndim() == 0) return false;
+    dshape = ConvertLayout(dshape, param.layout, kNCHW);
+
+    CHECK_EQ(dshape.ndim(), 4U) << "Input data should be 4D";
+    CHECK_EQ(param.kernel_size.ndim(), 2U);
+    CHECK_EQ(param.strides.ndim(), 2U)
+        << "incorrect stride size: " << param.strides;
+    CHECK_EQ(param.dilation.ndim(), 2U)
+        << "incorrect dilate size: " << param.dilation;
+    CHECK_EQ(dshape[1] % param.groups, 0U)
+        << "input channels must divide group size";
+    CHECK_EQ(param.channels % param.groups, 0U)
+        << "output channels must divide group size";
+
+    TShape wshape({param.channels / param.groups,
+                   dshape[1] / param.groups,
+                   param.kernel_size[0],
+                   param.kernel_size[1]});
+
+    wshape = ConvertLayout(wshape, kNCHW, param.layout, true);
+    wshape[0] *= param.groups;
+
+    NNVM_ASSIGN_OUTPUT_SHAPE(attrs, *out_attrs, 0, wshape);
+    return true;
+})
+.set_attr<FTVMCompute>(
+  "FTVMCompute", [](const NodeAttrs& attrs,
+                    const Array<Tensor>& inputs,
+                    const Array<Tensor>& out_info) {
+    const Conv2DParam& param = nnvm::get<Conv2DParam>(attrs.parsed);
+    return Array<Tensor>{
+      topi::conv2d_nchw_grad_weight(inputs[0], inputs[1],
+                                    param.kernel_size[0], param.kernel_size[1],
+                                    param.padding[0], param.padding[1],
+                                    param.strides[0], param.strides[1])
+    };
+  })
+.set_attr<FInferType>("FInferType", ElemwiseType<2, 1>)
 .set_attr<TIsBackward>("TIsBackward", true);
 
 
