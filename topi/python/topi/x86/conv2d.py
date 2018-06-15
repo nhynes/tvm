@@ -452,3 +452,30 @@ def _schedule_conv2d_NCHWc(cfg, outs):
 
     traverse(outs[0].op)
     return s
+
+
+@generic.schedule_conv2d_grad_weight_nchw.register(["cpu"])
+def schedule_conv2d_grad_weight(outs):
+    """Create schedule for tensors"""
+    s = tvm.create_schedule([x.op for x in outs])
+    target = tvm.target.current_target(allow_none=False)
+
+    dw = outs[0].op
+    data = dw.input_tensors[0].op
+
+    if not isinstance(data, tvm.tensor.PlaceholderOp) and 'pad' in data.tag:
+        n_pad, c_pad, h_pad, w_pad = data.axis
+        pad_fused = s[data].fuse(n_pad, c_pad)
+        s[data].parallel(pad_fused)
+
+    C = dw
+    n, c, kh, kw = dw.axis
+    rn, ry, rx = dw.reduce_axis
+    nc = s[dw].fuse(n, c)
+    k = s[dw].fuse(kh, kw)
+    s[dw].parallel(nc)
+    xo, xi = s[dw].split(rx, factor=16)
+    s[dw].reorder(nc, rn, ry, xo, k, xi)  # move rc to outer loop
+    s[dw].vectorize(xi)
+
+    return s
