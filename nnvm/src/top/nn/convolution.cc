@@ -476,7 +476,7 @@ NNVM_REGISTER_OP(_conv2d_grad)
 
     if (param.use_bias) {
       grads.push_back(
-          MakeNode("sum", n->attrs.name + "_db", {input}, {{"axis", "[2, 3]"}}));
+          MakeNode("sum", n->attrs.name + "_db", {ograd}, {{"axis", "[0, 2, 3]"}}));
     }
 
     return grads;
@@ -502,6 +502,7 @@ NNVM_REGISTER_OP(_conv2d_grad_weight)
     const Conv2DParam& param = nnvm::get<Conv2DParam>(attrs.parsed);
     TShape dshape = in_attrs->at(1);
     if (dshape.ndim() == 0) return false;
+    static const Layout kNCHW("NCHW");
     dshape = ConvertLayout(dshape, param.layout, kNCHW);
 
     CHECK_EQ(dshape.ndim(), 4U) << "Input data should be 4D";
@@ -520,7 +521,7 @@ NNVM_REGISTER_OP(_conv2d_grad_weight)
                    param.kernel_size[0],
                    param.kernel_size[1]});
 
-    wshape = ConvertLayout(wshape, kNCHW, param.layout, true);
+    wshape = ConvertLayout(wshape, kNCHW, param.layout);
     wshape[0] *= param.groups;
 
     NNVM_ASSIGN_OUTPUT_SHAPE(attrs, *out_attrs, 0, wshape);
