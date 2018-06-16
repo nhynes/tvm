@@ -503,6 +503,7 @@ NNVM_REGISTER_OP(_conv2d_grad_weight)
     TShape dshape = in_attrs->at(1);
     if (dshape.ndim() == 0) return false;
     static const Layout kNCHW("NCHW");
+    static const Layout kOIHW("OIHW");
     dshape = ConvertLayout(dshape, param.layout, kNCHW);
 
     CHECK_EQ(dshape.ndim(), 4U) << "Input data should be 4D";
@@ -521,7 +522,7 @@ NNVM_REGISTER_OP(_conv2d_grad_weight)
                    param.kernel_size[0],
                    param.kernel_size[1]});
 
-    wshape = ConvertLayout(wshape, kNCHW, param.layout);
+    wshape = ConvertLayout(wshape, kOIHW, param.kernel_layout);
     wshape[0] *= param.groups;
 
     NNVM_ASSIGN_OUTPUT_SHAPE(attrs, *out_attrs, 0, wshape);
