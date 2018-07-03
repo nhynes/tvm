@@ -639,10 +639,10 @@ Symbol Symbol::CreateFunctor(const NodeAttrs& attrs) {
 
 Symbol Symbol::CreateGroup(const std::vector<Symbol> &symbols) {
   Symbol ret;
+  std::unordered_set<std::string> ret_extra_outputs_names;
   for (const auto &s : symbols) {
     ret.outputs.insert(ret.outputs.end(), s.outputs.begin(), s.outputs.end());
-    ret.extra_outputs.insert(ret.extra_outputs.end(), s.extra_outputs.begin(),
-                             s.extra_outputs.end());
+    ret.extra_outputs.insert(ret.extra_outputs.end(), s.extra_outputs.begin(), s.extra_outputs.end());
   }
   return ret;
 }

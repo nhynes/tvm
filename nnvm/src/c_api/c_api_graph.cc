@@ -17,19 +17,19 @@ int NNGraphCreate(SymbolHandle symbol, GraphHandle *graph) {
   Graph* g = new Graph();
   API_BEGIN();
   Symbol* s = static_cast<Symbol*>(symbol);  // may actually be a Graph
-  std::unordered_set<uint32_t> g_outputs_indices;
-  std::unordered_set<uint32_t> g_extra_outputs_indices;
-  for (const auto& out : s->outputs)
+  std::unordered_set<std::string> g_outputs_names;
+  std::unordered_set<std::string> g_extra_outputs_names;
+  for (const auto& out : s->outputs) {
+    if (g_outputs_names.find(out.node->attrs.name) == g_outputs_names.end()) {
+      g_outputs_names.insert(out.node->attrs.name);
+    }
     g->outputs.push_back(out);
+  }
   for (const auto& out : s->extra_outputs) {
-    if (g_outputs_indices.find(out.index) == g_outputs_indices.end()) {
-      g_outputs_indices.insert(out.index);
-      g->outputs.push_back(out);
+    if (g_outputs_names.find(out.node->attrs.name) == g_outputs_names.end()) {
+      g_outputs_names.insert(out.node->attrs.name);
     }
-    if (g_extra_outputs_indices.find(out.index) == g_extra_outputs_indices.end()) {
-      g_extra_outputs_indices.insert(out.index);
-      g->extra_outputs.push_back(out);
-    }
+    g->outputs.push_back(out);
   }
   g->num_vis_outputs = s->outputs.size();
   *graph = g;
