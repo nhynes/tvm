@@ -881,7 +881,12 @@ Examples::
   "FGradient", [](const NodePtr& n,
                   const std::vector<NodeEntry>& ograds) {
     const TransposeParam& param = nnvm::get<TransposeParam>(n->attrs.parsed);
-    std::ostringstream oss; oss << param.axes;
+    TShape grad_axes(param.axes.ndim());
+    for (uint32_t i = 0; i < param.axes.ndim(); i++) {
+      uint32_t index = param.axes[i];
+      grad_axes[index] = i;
+    }
+    std::ostringstream oss; oss << grad_axes;
     return std::vector<NodeEntry>{
       MakeNode("transpose", n->attrs.name + "_t", {ograds[0]}, {{"axes", oss.str()}})
     };
