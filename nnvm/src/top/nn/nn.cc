@@ -343,7 +343,7 @@ axis to be the last item in the input shape.
     uint32_t in_dim = input_shapes[0].ndim();
     int ax = param.axis;
 
-    NodeEntry mean, var, new_mean, new_var;
+    NodeEntry mean, var, new_mean, new_var, var_unbiased;
     if (param.training) {
       mean = MakeNode("mean", n->attrs.name + "_mean", { inputs[0] },
                       {{"axis", std::to_string(ax)},
@@ -351,10 +351,13 @@ axis to be the last item in the input shape.
       var = MakeNode("var", n->attrs.name + "_var", { inputs[0] },
                       {{"axis", std::to_string(ax)},
                        {"exclude", "true"}});
+      var_unbiased = MakeNode("var_unbiased", n->attrs.name + "_var_unbiased", { inputs[0] },
+                      {{"axis", std::to_string(ax)},
+                       {"exclude", "true"}});
       new_mean = MakeMomentumNode(n->attrs.name + "_mean_mom",
                                   inputs[3], mean, param.momentum);
       new_var = MakeMomentumNode(n->attrs.name + "_var_mom",
-                                 inputs[4], var, param.momentum);
+                                 inputs[4], var_unbiased, param.momentum);
     } else {
       mean = inputs[3];
       var = inputs[4];
@@ -377,8 +380,8 @@ axis to be the last item in the input shape.
           })
       });
 
-    NodeEntry scale = inputs[1];
-    NodeEntry shift = inputs[2];
+    NodeEntry scale = compiler::ExpandBiasToMatchAxis(inputs[1], in_dim, 1, ax);
+    NodeEntry shift = compiler::ExpandBiasToMatchAxis(inputs[2], in_dim, 1, ax);
     NodeEntry x_affine = MakeNode("broadcast_add", n->attrs.name, {
         MakeNode("broadcast_mul", n->attrs.name + "_weight", { x_normed, scale }),
         shift

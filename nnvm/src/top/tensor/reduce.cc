@@ -19,6 +19,8 @@
 #include "topi/elemwise.h"
 #include "topi/reduction.h"
 #include "topi/transform.h"
+#include "topi/detail/constant_utils.h"
+#include "../../compiler/pattern_util.h"
 
 static_assert(TOPI_REDUCE_ATLEAST1D, "need to use legacy reduce behavior");
 
@@ -210,14 +212,51 @@ Example::
   "FExpandCompute", [](const NodePtr& n,
                        const std::vector<NodeEntry>& inputs,
                        const std::vector<TShape>& input_shapes) {
+    const ReduceParam& param = nnvm::get<ReduceParam>(n->attrs.parsed);
+    uint32_t in_dim = input_shapes[0].ndim();
+    int ax = param.axis[0];
+
     auto rp_keepdims = std::unordered_map<std::string, std::string>(n->attrs.dict);
     auto inp = n->inputs[0];
     auto mean = MakeNode("mean", n->attrs.name + "_m1", {inp}, rp_keepdims);
-    auto diffs = MakeNode("broadcast_sub", n->attrs.name + "_sub", {inp, mean});
+    auto mean_expanded = compiler::ExpandBiasToMatchAxis(mean, in_dim, 1, ax);
+    auto diffs = MakeNode("broadcast_sub", n->attrs.name + "_sub", {inp, mean_expanded});
     auto diffs2 = MakeNode("__pow_scalar__", n->attrs.name + "_pow",
                            { diffs }, {{"scalar", "2"}});
     return std::vector<NodeEntry>{
       MakeNode("mean", n->attrs.name, { diffs2 }, n->attrs.dict)
+    };
+});
+
+NNVM_REGISTER_REDUCE_OP(var_unbiased)
+.describe(R"code(Computes the unbiased variance of array elements over given axes.
+)code" NNVM_ADD_FILELINE)
+.set_attr<FExpandCompute>(
+  "FExpandCompute", [](const NodePtr& n,
+                       const std::vector<NodeEntry>& inputs,
+                       const std::vector<TShape>& input_shapes) {
+    const ReduceParam& param = nnvm::get<ReduceParam>(n->attrs.parsed);
+    uint32_t in_dim = input_shapes[0].ndim();
+    int ax = param.axis[0];
+
+    unsigned numel = 1;
+    TShape ishape = input_shapes[0];
+    TShape r_axes = GetReduceAxes(ishape.ndim(), param.axis, param.exclude);
+    for (const int& ax : r_axes) {
+      numel *= ishape[ax];
+    }
+
+    auto rp_keepdims = std::unordered_map<std::string, std::string>(n->attrs.dict);
+    auto inp = n->inputs[0];
+    auto mean = MakeNode("mean", n->attrs.name + "_m1", {inp}, rp_keepdims);
+    auto mean_expanded = compiler::ExpandBiasToMatchAxis(mean, in_dim, 1, ax);
+    auto diffs = MakeNode("broadcast_sub", n->attrs.name + "_sub", {inp, mean_expanded});
+    auto diffs2 = MakeNode("__pow_scalar__", n->attrs.name + "_pow",
+                           { diffs }, {{"scalar", "2"}});
+    return std::vector<NodeEntry>{
+      MakeNode("__div_scalar__", n->attrs.name,
+          {MakeNode("sum", n->attrs.name + "_s1", { diffs2 }, n->attrs.dict)},
+          {{"scalar", std::to_string(numel - 1)}})
     };
 });
 
