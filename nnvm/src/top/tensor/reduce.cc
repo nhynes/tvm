@@ -64,8 +64,8 @@ inline TShape GetReduceAxes(const uint32_t indim,
   return r_axis;
 }
 
-inline TShape ReduceShapeImpl(const TShape& ishape,
-                              const TShape& axis,
+inline TShape ReduceShapeImpl(TShape ishape,
+                              TShape axis,
                               bool keepdims,
                               bool exclude) {
   uint32_t indim = ishape.ndim();

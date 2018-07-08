@@ -390,6 +390,190 @@ axis to be the last item in the input shape.
   })
 .set_support_level(1);
 
+// instancenorm
+DMLC_REGISTER_PARAMETER(InstanceNormParam);
+
+inline bool InstanceNormInferShape(const nnvm::NodeAttrs& attrs,
+                                   std::vector<TShape>* in_shape,
+                                   std::vector<TShape>* out_shape) {
+  const InstanceNormParam& param = nnvm::get<InstanceNormParam>(attrs.parsed);
+  CHECK_EQ(in_shape->size(), 3U)
+      << "Input:[data, gamma, beta]";
+  CHECK_EQ(out_shape->size(), 1U);
+  const TShape &dshape = in_shape->at(0);
+  if (dshape.ndim() == 0) return false;
+  CHECK((size_t)param.axis < dshape.Size());
+
+  NNVM_ASSIGN_OUTPUT_SHAPE(attrs, *out_shape, 0, dshape);
+  return true;
+}
+
+inline bool InstanceNormCorrectLayout(const NodeAttrs& attrs,
+                                   std::vector<Layout> *in_layouts,
+                                   const std::vector<Layout> *last_in_layouts,
+                                   std::vector<Layout> *out_layouts) {
+  const InstanceNormParam& param = nnvm::get<InstanceNormParam>(attrs.parsed);
+  CHECK_EQ(in_layouts->size(), 3U);
+  CHECK_EQ(last_in_layouts->size(), 3U);
+  CHECK_EQ(out_layouts->size(), 1U);
+
+  Layout data_layout = in_layouts->at(0);
+  const Layout& origin_data_layout = last_in_layouts->at(0);
+  Layout param_layout("C");
+  if (data_layout.defined()) {
+    if (data_layout.indexof('C') != param.axis) {
+      CHECK(origin_data_layout.defined())
+        << "Channel in data layout " << data_layout
+        << " is not at index " << param.axis;
+      // convert it to the original one.
+      data_layout = origin_data_layout;
+      NNVM_ASSIGN_LAYOUT(*in_layouts, 0, origin_data_layout);
+    } else if (data_layout.indexof('c') >= 0 &&
+               static_cast<uint32_t>(data_layout.indexof('c')) != (data_layout.ndim()-1)) {
+      CHECK(origin_data_layout.defined())
+        << "sub-channel c in data layout " << data_layout
+        << " does not at the final dimension";
+      // convert it to the original one.
+      data_layout = origin_data_layout;
+      NNVM_ASSIGN_LAYOUT(*in_layouts, 0, origin_data_layout);
+    } else {
+      for (Layout::LayoutDim axis : data_layout) {
+        if (Layout::is_subdim(axis) && axis != 'c') {
+          CHECK(origin_data_layout.defined())
+            << "sub-axis other than c appears in data layout " << data_layout;
+          // convert it to the original one.
+          data_layout = origin_data_layout;
+          NNVM_ASSIGN_LAYOUT(*in_layouts, 0, origin_data_layout);
+          break;
+        }
+      }
+    }
+
+    // decide the param layout
+    if (data_layout.defined()) {
+      auto channel_block = data_layout.subsizeof('C');
+      if (channel_block > 0) {
+        param_layout = param_layout.split('C', 1, channel_block);
+      }
+    }
+  }
+
+  NNVM_ASSIGN_LAYOUT(*in_layouts, 0, data_layout);
+  NNVM_ASSIGN_LAYOUT(*in_layouts, 1, param_layout);
+  NNVM_ASSIGN_LAYOUT(*in_layouts, 2, param_layout);
+
+  NNVM_ASSIGN_LAYOUT(*out_layouts, 0, data_layout);
+  return true;
+}
+
+NNVM_REGISTER_OP(instance_norm)
+.describe(R"(Batch normalization layer (Ioffe and Szegedy, 2014).
+Normalizes the input at each batch, i.e. applies a transformation
+that maintains the mean activation close to 0 and the activation
+standard deviation close to 1.
+
+.. math::
+
+  data\_mean[i] = mean(data[:,i,:,...]) \\
+  data\_var[i] = var(data[:,i,:,...])
+
+Then compute the normalized output, which has the same shape as input, as following:
+
+.. math::
+
+  out[:,i,:,...] = \frac{data[:,i,:,...] - data\_mean[i]}{\sqrt{data\_var[i]+\epsilon}} * gamma[i] + beta[i]
+
+Both *mean* and *var* returns a scalar by treating the input as a vector.
+
+Assume the input has size *k* on axis 1, then both ``gamma`` and ``beta`` have shape *(k,)*.
+
+Besides the inputs and the outputs, this operator accepts two auxiliary
+states, ``moving_mean`` and ``moving_var``, which are *k*-length
+vectors. They are global statistics for the whole dataset, which are updated
+by::
+
+  moving_mean = moving_mean * momentum + data_mean * (1 - momentum)
+  moving_var = moving_var * momentum + data_var * (1 - momentum)
+
+The parameter ``axis`` specifies which axis of the input shape denotes
+the 'channel' (separately normalized groups).  The default is 1.  Specifying -1 sets the channel
+axis to be the last item in the input shape.
+
+.. note::
+    This operator can be optimized away for inference.
+)" NNVM_ADD_FILELINE)
+.add_argument("data", "Tensor", "Input to which dropout will be applied")
+.add_argument("gamma", "Tensor", "The gamma scale factor")
+.add_argument("beta", "Tensor", "The beta offset factor")
+.add_arguments(InstanceNormParam::__FIELDS__())
+.set_attr_parser(ParamParser<InstanceNormParam>)
+.set_attr<FGetAttrDict>("FGetAttrDict", ParamGetAttrDict<InstanceNormParam>)
+.set_attr<FCorrectLayout>("FCorrectLayout", InstanceNormCorrectLayout)
+.set_num_inputs(3)
+.set_num_outputs(1)
+.set_attr<FInferShape>("FInferShape", InstanceNormInferShape)
+.set_attr<FInferType>("FInferType", ElemwiseType<3, 1>)
+.set_attr<FListInputNames>("FListInputNames", [](const NodeAttrs& attrs) {
+    return std::vector<std::string>{"data", "gamma", "beta"};
+  })
+.set_attr<FListOutputNames>("FListOutputNames", [](const NodeAttrs& attrs) {
+    return std::vector<std::string>{"output"};
+  })
+.set_attr<FNumVisibleOutputs>("FNumVisibleOutputs", [](const NodeAttrs& attrs) {
+    return 1;
+  })
+.set_attr<FExpandCompute>(
+  "FExpandCompute", [](const NodePtr& n,
+                 const std::vector<NodeEntry>& inputs,
+                 const std::vector<TShape>& input_shapes) {
+    const InstanceNormParam& param = nnvm::get<InstanceNormParam>(n->attrs.parsed);
+    uint32_t in_dim = input_shapes[0].ndim();
+
+    uint32_t N = input_shapes[0][0];
+    uint32_t C = input_shapes[0][1];
+    uint32_t H = input_shapes[0][2];
+    uint32_t W = input_shapes[0][3];
+
+    TShape new_axes(3);
+    new_axes[0] = N;
+    new_axes[1] = C;
+    new_axes[2] = H * W;
+    std::ostringstream oss; oss << new_axes;
+    NodeEntry input_reshaped = MakeNode("reshape", n->attrs.name + "_input_reshape",
+        { inputs[0]}, {{"shape", oss.str()}});
+    NodeEntry temp_transpose = MakeNode("transpose", n->attrs.name + "_transpose_temp",
+        { input_reshaped }, {{"axes", "[2, 0, 1]"}});
+
+    NodeEntry mean = MakeNode("mean", n->attrs.name + "_mean", { temp_transpose },
+                    {{"axis", "0"}});
+    NodeEntry var = MakeNode("var", n->attrs.name + "_var", { temp_transpose },
+                    {{"axis", "0"}});
+
+    NodeEntry t1 = MakeNode("transpose", n->attrs.name + "_transpose1", { inputs[0] },
+        {{"axes", "[2, 3, 0, 1]"}});
+    NodeEntry x_normed_transposed = MakeNode("broadcast_div",
+        n->attrs.name + "_scale_transposed", {
+        MakeNode("broadcast_sub", n->attrs.name + "_center", { t1, mean }),
+        MakeNode("sqrt", n->attrs.name + "_sqrt", {
+            MakeNode("__add_scalar__", n->attrs.name + "_add_eps",
+                     { var }, {{"scalar", std::to_string(param.epsilon)}})
+          })
+      });
+    NodeEntry x_normed = MakeNode("transpose", n->attrs.name + "_normed",
+        { x_normed_transposed },
+        {{"axes", "[2, 3, 0, 1]"}});
+
+    NodeEntry scale = compiler::ExpandBiasToMatchAxis(inputs[1], in_dim, 1, 1);
+    NodeEntry shift = compiler::ExpandBiasToMatchAxis(inputs[2], in_dim, 1, 1);
+
+    NodeEntry x_affine = MakeNode("broadcast_add", n->attrs.name, {
+        MakeNode("broadcast_mul", n->attrs.name + "_weight", { x_normed, scale }),
+        shift
+      });
+    return std::vector<NodeEntry>{ x_affine };
+  })
+.set_support_level(1);
+
 // softmax
 DMLC_REGISTER_PARAMETER(SoftmaxParam);
 

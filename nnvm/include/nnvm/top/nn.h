@@ -77,6 +77,34 @@ struct BatchNormParam : public dmlc::Parameter<BatchNormParam> {
   static const constexpr int kMovingVariance = 4;
 };
 
+struct InstanceNormParam : public dmlc::Parameter<InstanceNormParam> {
+  int axis;
+  double epsilon;
+  double momentum;
+  bool center;
+  bool scale;
+
+  DMLC_DECLARE_PARAMETER(InstanceNormParam) {
+    DMLC_DECLARE_FIELD(axis).set_default(1)
+      .describe("Specify which shape axis the channel is specified.");
+    DMLC_DECLARE_FIELD(momentum).set_default(0.1)
+      .describe("Dampening parameter for moving_(mean|var) when training.");
+    DMLC_DECLARE_FIELD(epsilon).set_default(1e-5)
+        .describe("Small float added to variance to avoid dividing by zero.");
+    DMLC_DECLARE_FIELD(center).set_default(true)
+        .describe("If True, add offset of `beta` to normalized tensor."
+                  "If False, `beta` is ignored.");
+    DMLC_DECLARE_FIELD(scale).set_default(true)
+        .describe("If True, multiply by `gamma`. If False, `gamma` is not used."
+                  "When the next layer is piecewise linear (also e.g. `nn.relu`),"
+                  "this can be disabled since the scaling"
+                  "will be done by the next layer.");
+  }
+  // constants
+  static const constexpr int kData = 0;
+  static const constexpr int kGamma = 1;
+  static const constexpr int kBeta = 2;
+};
 
 // Shared by softmax and log_softmax
 struct SoftmaxParam : public dmlc::Parameter<SoftmaxParam> {
