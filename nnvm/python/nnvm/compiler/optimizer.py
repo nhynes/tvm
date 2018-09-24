@@ -89,7 +89,10 @@ class SGD(Optimizer):
             g = self.rescale_grad * g
             if self.clip_gradient is not None:
                 g = sym.clip(g, a_min=-1 * self.clip_gradient, a_max=self.clip_gradient)
-            updates.append(sym._assign(v, v - lr_t * (g + self.wd * v)))
+            step = g
+            if self.wd:
+                step += self.wd * v
+            updates.append(sym._assign(v, v - lr_t * step))
         return sym.Group(updates)
 
 
