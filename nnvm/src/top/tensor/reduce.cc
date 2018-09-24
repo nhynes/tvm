@@ -413,6 +413,23 @@ Example::
   [ 2.  3.16666667  4.5]
 
 )code" NNVM_ADD_FILELINE)
+.set_attr<FExpandCompute>(
+  "FExpandCompute", [](const NodePtr& n,
+                       const std::vector<NodeEntry>& inputs,
+                       const std::vector<TShape>& input_shapes) {
+    const ReduceParam& param = nnvm::get<ReduceParam>(n->attrs.parsed);
+    unsigned numel = 1;
+    TShape ishape = input_shapes[0];
+    TShape r_axes = GetReduceAxes(ishape.ndim(), param.axis, param.exclude);
+    for (const int& ax : r_axes) {
+      numel *= ishape[ax];
+    }
+    return std::vector<NodeEntry>{
+      MakeNode("__div_scalar__", n->attrs.name,
+          {MakeNode("sum", n->attrs.name + "_sum", {n->inputs[0]}, n->attrs.dict)},
+          {{"scalar", std::to_string(numel)}})
+    };
+})
 .set_attr<FTVMCompute>(
   "FTVMCompute", [](const NodeAttrs& attrs,
                     const Array<Tensor>& inputs,
