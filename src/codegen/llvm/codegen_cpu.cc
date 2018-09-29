@@ -586,7 +586,7 @@ void CodeGenCPU::AddStartupFunction() {
     llvm::FunctionType* ftype = llvm::FunctionType::get(t_void_, {}, false);
     function_ = llvm::Function::Create(
         ftype,
-        llvm::Function::InternalLinkage,
+        llvm::Function::ExternalLinkage,
         "__tvm_module_startup", module_.get());
     llvm::BasicBlock* startup_entry = llvm::BasicBlock::Create(*ctx_, "entry", function_);
     builder_->SetInsertPoint(startup_entry);
