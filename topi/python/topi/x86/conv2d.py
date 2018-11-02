@@ -476,7 +476,6 @@ def schedule_conv2d_grad_weight(outs):
     s[dw].parallel(nc)
     xo, xi = s[dw].split(rx, factor=16)
     s[dw].reorder(nc, rn, ry, xo, k, xi)  # move rc to outer loop
-    s[dw].vectorize(xi)
 
     return s
 
