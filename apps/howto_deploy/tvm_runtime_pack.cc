@@ -25,8 +25,8 @@
 #include "../../src/runtime/module.cc"
 #include "../../src/runtime/registry.cc"
 #include "../../src/runtime/file_util.cc"
-#include "../../src/runtime/threading_backend.cc"
-#include "../../src/runtime/thread_pool.cc"
+// #include "../../src/runtime/threading_backend.cc"
+// #include "../../src/runtime/thread_pool.cc"
 #include "../../src/runtime/ndarray.cc"
 
 // NOTE: all the files after this are optional modules
@@ -35,7 +35,7 @@
 // Likely we only need to enable one of the following
 // If you use Module::Load, use dso_module
 // For system packed library, use system_lib_module
-#include "../../src/runtime/dso_module.cc"
+// #include "../../src/runtime/dso_module.cc"
 #include "../../src/runtime/system_lib_module.cc"
 
 // Graph runtime
@@ -47,9 +47,9 @@
 // #include "../../src/runtime/rpc/rpc_server_env.cc"
 
 // These macros enables the device API when uncommented.
-#define TVM_CUDA_RUNTIME 1
-#define TVM_METAL_RUNTIME 1
-#define TVM_OPENCL_RUNTIME 1
+// #define TVM_CUDA_RUNTIME 1
+// #define TVM_METAL_RUNTIME 1
+// #define TVM_OPENCL_RUNTIME 1
 
 // Uncomment the following lines to enable Metal
 // #include "../../src/runtime/metal/metal_device_api.mm"

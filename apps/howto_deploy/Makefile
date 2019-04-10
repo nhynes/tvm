@@ -7,8 +7,9 @@ PKG_CFLAGS = -std=c++11 -O2 -fPIC\
 	-I${TVM_ROOT}/include\
 	-I${DMLC_CORE}/include\
 	-I${TVM_ROOT}/3rdparty/dlpack/include\
+	-D__RISCV__=1
 
-PKG_LDFLAGS = -L${TVM_ROOT}/build -ldl -lpthread
+PKG_LDFLAGS = -L${TVM_ROOT}/build
 
 .PHONY: clean all
 
@@ -20,13 +21,18 @@ lib/libtvm_runtime_pack.o: tvm_runtime_pack.cc
 	$(CXX) -c $(PKG_CFLAGS) -o $@  $^
 
 # The code library built by TVM
-lib/test_addone_sys.o: prepare_test_libs.py
-	python prepare_test_libs.py
+lib/test_addone_sys.cc: prepare_test_libs.py
+	@mkdir -p $(@D)
+	python3 prepare_test_libs.py
+
+lib/test_addone_sys.o: lib/test_addone_sys.cc
+	@mkdir -p $(@D)
+	$(CXX) -c $(PKG_CFLAGS) -o $@ $^
 
 # Deploy using the all in one TVM package library
 lib/cpp_deploy_pack: cpp_deploy.cc lib/test_addone_sys.o lib/libtvm_runtime_pack.o
 	@mkdir -p $(@D)
-	$(CXX) $(PKG_CFLAGS) -o $@  $^ $(PKG_LDFLAGS)
+	$(CXX) $(PKG_CFLAGS) -o $@  $^ $(PKG_LDFLAGS) -static
 
 # Deploy using pre-built libtvm_runtime.so
 lib/cpp_deploy_normal: cpp_deploy.cc lib/test_addone_sys.o

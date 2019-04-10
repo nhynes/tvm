@@ -13,8 +13,8 @@ def prepare_test_libs(base_path):
     fadd_dylib.export_library(dylib_path)
 
     # Compile library in system library mode
-    fadd_syslib = tvm.build(s, [A, B], "llvm --system-lib", name="addonesys")
-    syslib_path = os.path.join(base_path, "test_addone_sys.o")
+    fadd_syslib = tvm.build(s, [A, B], "c --system-lib", name="addonesys")
+    syslib_path = os.path.join(base_path, "test_addone_sys.cc")
     fadd_syslib.save(syslib_path)
 
 if __name__ == "__main__":
